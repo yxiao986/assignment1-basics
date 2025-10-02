@@ -52,7 +52,7 @@ def parallel_pre_tokenize(
     with open(input_path, "rb") as f:
     
         # parallel with multiprocessing
-        num_process =   multiprocessing.cpu_count() // 4
+        num_process =  4 # multiprocessing.cpu_count() 
         boundaries = find_chunk_boundaries(f, num_process, special_tokens[0].encode("utf-8"))
 
         with multiprocessing.Pool() as pool:
