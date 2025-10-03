@@ -3,6 +3,8 @@ from .pretokenization_example import find_chunk_boundaries
 from itertools import repeat
 import multiprocessing
 import regex as re
+import argparse
+import time
 
 def train_bpe(
         input_path: str,
@@ -52,7 +54,7 @@ def parallel_pre_tokenize(
     with open(input_path, "rb") as f:
     
         # parallel with multiprocessing
-        num_process =  4 # multiprocessing.cpu_count() 
+        num_process =  2 # multiprocessing.cpu_count() 
         boundaries = find_chunk_boundaries(f, num_process, special_tokens[0].encode("utf-8"))
 
         with multiprocessing.Pool() as pool:
@@ -85,12 +87,12 @@ def process_chunk(
             escaped_tokens.append(re.escape(token))
 
         split_on_token = '|'.join(escaped_tokens)
-        stripped_chunk = re.split(split_on_token,chunk)
+        splited_chunk = re.split(split_on_token,chunk)
 
         # pre-tokenize by PAT
         PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
         pre_tokens = []
-        for token in stripped_chunk:
+        for token in splited_chunk:
             pre_token = re.finditer(PAT, token)
             pre_tokens += pre_token
 
@@ -168,13 +170,30 @@ def compute_merges(
 
 
             
-
 if __name__ == '__main__':
-    # test init_vocab
-    special_tokens = ["<|endoftext|>"]
-    vocab = init_vocab(special_tokens)
+    parser = argparse.ArgumentParser(description="Train a BPE tokenizer on TinyStories.")
+    parser.add_argument("--input_path", type=str, default="data/TinyStoriesV2-GPT4-train.txt", help="path of training data")
+    parser.add_argument("--vocab_size", type=int, default=10000, help="final size of vocabulary")
+    parser.add_argument("--special_tokens", type=str, nargs='*', default=["<|endoftext|>"], help="special tokens that we need to add to vocabulary")
+    parser.add_argument("--output_vocab_path", type=str, default="data/vocab_TinyStories.txt", help="output path of vocab file")
+    parser.add_argument("--output_merges_path", type=str, default="data/merges_TinyStories.txt",help="output path of merges file")
+    args = parser.parse_args()
 
-    # test parallel_pre_tokenize
-    pre_tokens = parallel_pre_tokenize("data/owt_valid.txt", special_tokens)
-    print(pre_tokens)
+    print(f"Starting BPE training on '{args.input_path}'...")
 
+    start_time = time.time()
+    vocab, merges = train_bpe(args.input_path, args.vocab_size, args.special_tokens)
+    end_time = time.time()
+    print(f"\nTraining finished in {end_time - start_time:.2f} seconds.")
+
+    # save vocab and merges
+    with open(args.output_vocab_path, "wb") as f:
+        for idx in range(len(vocab)):
+            f.write(f"{idx}\t".encode("utf-8") + vocab[idx] + b"\n")
+
+    with open(args.output_merges_path, "w") as f:
+        for merge in merges:
+            p1_str = merge[0].decode('utf-8', errors='backslashreplace')
+            p2_str = merge[1].decode('utf-8', errors='backslashreplace')
+        
+            f.write(f"{p1_str} {p2_str}\n")
